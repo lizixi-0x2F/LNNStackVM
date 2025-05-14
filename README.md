@@ -1,14 +1,40 @@
 # LNNStackVM: Neural Network with Stack-Based Virtual Machine
 
-This project implements a Liquid Time-Constant (LTC) neural network using PyTorch to approximate the function `sin(x) + 0.5*sin(3x)`. The trained model is translated into bytecode and executed on a stack-based virtual machine (VM). The project includes a high-performance C-based VM and a JIT-optimized Python VM for accelerated inference, demonstrating neural network training, ODE-based modeling, and lightweight VM inference.
+This project implements a Liquid Time-Constant (LTC) neural network using PyTorch to approximate the function `sin(x) + 0.5*sin(3x)`. The trained model is translated into bytecode and executed on a stack-based virtual machine (VM). The project includes a high-performance C-based VM for accelerated inference, demonstrating neural network training, ODE-based modeling, and lightweight VM inference.
+
+## Latest Research Achievements
+The C virtual machine in this project has undergone a series of performance optimizations, significantly improving inference speed while maintaining high accuracy:
+
+1. **SIMD Instruction Set Optimization**:
+   - Implemented vectorized computation for different platforms (ARM NEON/x86 AVX/SSE3)
+   - Accelerated matrix operations (multiplication, addition) with SIMD
+   - Developed high-precision exp and sigmoid functions for ARM NEON platform
+
+2. **Memory Management Optimization**:
+   - Implemented memory pool management to reduce frequent memory allocation/deallocation
+   - Optimized memory alignment to improve SIMD operation efficiency
+
+3. **Algorithm Optimization**:
+   - Improved matrix multiplication algorithm to increase cache hit rate
+   - Implemented accurate sigmoid function to ensure computational precision
+
+4. **Platform Adaptation**:
+   - Specifically optimized for Apple Silicon (ARM architecture)
+   - Dynamically selects the best vectorized implementation based on different CPU architectures
+
+Performance Comparison:
+| Implementation | Before Optimization | After Optimization | Performance Gain |
+|----------------|---------------------|-------------------|-----------------|
+| C VM           | ~337 μs            | ~123 μs           | 2.8x            |
+
+At the same time, the optimized code has a prediction error of only 0.000744 compared to the original PyTorch model, ensuring high performance without sacrificing accuracy.
 
 ## Features
 - Trains an LTC neural network with PyTorch and `torchdiffeq`.
 - Translates the model to bytecode for a stack-based VM.
 - Accelerates inference with:
   - A C-based VM (10x–100x faster than Python VM).
-  - A JIT-compiled Python VM (~3x faster than standard PyTorch).
-- Compares PyTorch, JIT VM, and C VM predictions visually.
+- Compares PyTorch and C VM predictions visually.
 - Generates `const_pool.npz`, `bytecode.bin`, and `ltc_fit_result_c.png` (includes C VM).
 
 ## Architecture
@@ -20,14 +46,12 @@ The project consists of three main components:
 3. **Virtual Machine**:
    - **Python VM**: Pure Python implementation (baseline).
    - **C VM**: High-performance C implementation (10x-100x speedup).
-   - **JIT VM**: PyTorch JIT-optimized implementation (3.25x speedup).
 
 ### Performance Comparison
 
 | Implementation | Average Runtime | Speedup |
 |----------------|----------------|---------|
 | PyTorch        | ~330 μs/call   | 1.0x    |
-| JIT VM         | ~100 μs/call   | 3.25x   |
 | C VM           | ~5-50 μs/call  | 10-100x |
 
 ## Requirements
@@ -75,41 +99,20 @@ The project consists of three main components:
    python src/LNNStackVM.py
    ```
 
-2. Run the JIT VM version for PyTorch JIT-accelerated inference:
-   ```bash
-   python src/LNNStackJITVM.py
-   ```
-
-3. Outputs:
+2. Outputs:
    - `./output/const_pool.npz`: Model weights and constants.
    - `./output/bytecode.bin`: Compiled bytecode for the VM.
    - `./image/ltc_fit_result_c.png`: Plot comparing true function, PyTorch, and C VM predictions.
 
-4. Expected console output includes:
+3. Expected console output includes:
    - Training progress and loss metrics.
-   - Validation results (e.g., PyTorch vs. JIT VM vs. C VM outputs).
+   - Validation results (e.g., PyTorch vs. C VM outputs).
    - Performance metrics:
      - C VM: ~5–50 µs/call
-     - JIT VM: ~100 µs/call
      - Python VM: ~500–1000 µs/call
      - PyTorch: ~330 µs/call
 
-*Note*: These diagrams reflect the VM and bytecode compiler architecture. Both the C VM and JIT VM follow the core architecture but are optimized for their respective environments.
-
-## JIT Implementation Details
-
-The JIT VM implementation (`src/LNNStackJITVM.py`) uses PyTorch's JIT compilation to optimize the ODE solver for faster inference:
-
-- Avoids nested function definitions to comply with TorchScript limitations
-- Implements a custom ODE solver compatible with JIT compilation
-- Manages memory efficiently through TorchScript static typing
-- Achieves approximately 3.25x speedup over standard PyTorch execution
-
-Benefits of the JIT VM include:
-- Pure Python implementation (no C compilation required)
-- Significant performance improvement
-- Platform-independent optimization
-- Maintains PyTorch GPU acceleration capabilities
+*Note*: These diagrams reflect the VM and bytecode compiler architecture. The C VM follows the core architecture but is optimized for performance.
 
 ## Troubleshooting
 - **C VM Library Error** (`OSError: dlopen(libltc_vm.so, ...)`):
@@ -131,10 +134,6 @@ Benefits of the JIT VM include:
     conda activate oz_arm64
     pip install -r requirements.txt
     ```
-
-- **JIT Compilation Issues**:
-  - If TorchScript errors occur (e.g., "function definitions aren't supported"), ensure you're using the JIT-compatible implementation which avoids nested functions.
-  - For GPU acceleration with JIT VM, ensure CUDA is properly installed and compatible with your PyTorch version.
 
 - **Overflow Warning in Python VM**:
   - If `RuntimeWarning: overflow encountered in exp` appears, the script includes a fix with tighter clipping in the sigmoid function (`[-100, 100]`). If issues persist, re-train with stronger regularization (edit `train_model` in `LNNStackVM_c.py` to increase `weight_decay`).

@@ -1,66 +1,30 @@
 CC = gcc
-CFLAGS = -O3 -Wall -shared -fPIC -std=c99
-ARCH_FLAGS = 
-UNAME_S := $(shell uname -s)
-UNAME_M := $(shell uname -m)
+CFLAGS = -std=c99 -O3 -Wall -Wextra 
+# M系列芯片自带NEON，不需要额外标记
+SIMD_FLAGS = 
+# Mac环境下暂时移除OpenMP支持
+# PARALLEL_FLAGS = -fopenmp
+PARALLEL_FLAGS =
+LIBS = -lm
 
-# 检测架构
-ifeq ($(UNAME_M),x86_64)
-    ARCH_FLAGS += -DARCH_X86_64 -arch x86_64
-else ifeq ($(UNAME_M),arm64)
-    ARCH_FLAGS += -DARCH_ARM64 -arch arm64
-endif
+# 源代码路径
+SRC = src/vm.c
+OBJ = $(SRC:.c=.o)
+TARGET = libvm.so
 
-# 检测操作系统
-ifeq ($(UNAME_S),Darwin)
-    # macOS特定设置
-    LDFLAGS = -lm
-    # 使用VM_JIT_EXPORTS宏表示导出符号
-    CFLAGS += -DVM_JIT_EXPORTS
-else ifeq ($(UNAME_S),Linux)
-    # Linux特定设置
-    LDFLAGS = -lm
-    CFLAGS += -DVM_JIT_EXPORTS
-else
-    # 默认为Windows
-    LDFLAGS = -lm
-    CFLAGS += -DVM_JIT_EXPORTS
-endif
+# 默认目标
+all: $(TARGET)
 
-TARGET_DIR = output
-TARGET = $(TARGET_DIR)/lib_vm.so
-TARGET_JIT = $(TARGET_DIR)/lib_vm_jit.so
+# 编译动态库
+$(TARGET): $(OBJ)
+	$(CC) -shared -o $@ $^ $(CFLAGS) $(SIMD_FLAGS) $(PARALLEL_FLAGS) $(LIBS)
 
-SRCS = src/vm.c
-SRCS_JIT = src/vm_jit.c
-HEADERS_JIT = src/vm_jit.h
-
-ifeq ($(UNAME_M),x86_64)
-    SRCS_JIT += src/vm_jit_x86.c
-else ifeq ($(UNAME_M),arm64)
-    SRCS_JIT += src/vm_jit_arm64.c
-endif
-
-OBJS = $(SRCS:.c=.o)
-OBJS_JIT = $(SRCS_JIT:.c=.o)
-
-.PHONY: all clean dirs jit
-
-all: dirs $(TARGET) $(TARGET_JIT)
-
-jit: dirs $(TARGET_JIT)
-
-dirs:
-	@mkdir -p $(TARGET_DIR)
-
-$(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) $(ARCH_FLAGS) -o $@ $^ $(LDFLAGS)
-
-$(TARGET_JIT): $(OBJS_JIT)
-	$(CC) $(CFLAGS) $(ARCH_FLAGS) -o $@ $^ $(LDFLAGS)
-
+# 编译规则
 %.o: %.c
-	$(CC) $(CFLAGS) $(ARCH_FLAGS) -c $< -o $@
+	$(CC) -c -fPIC $< -o $@ $(CFLAGS) $(SIMD_FLAGS) $(PARALLEL_FLAGS)
 
+# 清理
 clean:
-	rm -f $(OBJS) $(OBJS_JIT) $(TARGET) $(TARGET_JIT)
+	rm -f $(OBJ) $(TARGET)
+
+.PHONY: all clean
